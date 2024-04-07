@@ -14,7 +14,7 @@ const uint8_t bayer8[]= {0,32,8,40,2,34,10,42,48,16,56,24,
 
 
 const uint8_t s_ssd1306_invertByte = 0x00000000;
-const int bfactor = 64;
+const uint8_t bfactor = 64;
 float t = 0.2;
 uint16_t frameCount = 0;
 
@@ -35,14 +35,16 @@ void setup() {
 }
 
 void loop() {
-  // unsigned long start = millis();
-  t = 0.2 + 3*float(frameCount%100)/100;
+  unsigned long start = millis();
+  t = 0.01 + 3*float(frameCount%250)/250;
 
-  compute_buffer();
+  computeMatrix();
   //Serial.println(F("buffer done"));
   outputMatrix();
 
   frameCount += 1;
+
+  Serial.println(millis() - start);
 }
 
 
@@ -50,37 +52,34 @@ void loop() {
 
 
 void outputMatrix() {
-
   ssd1306_lcd.set_block(0, 0, 128);
 
-  for (uint16_t col = 0; col < 8; col++) {
-
-    for (uint16_t row = 0; row <= 127; row++) {
+  for (uint8_t col = 0; col < 8; col++) {
+    for (uint8_t row = 0; row <= 127; row++) {
       ssd1306_lcd.send_pixels1(s_ssd1306_invertByte ^ Matrix[row].b[col]);
-      //spi.write(Matrix[row].b[col]);
     }	
     ssd1306_lcd.next_page();
   }
+
   ssd1306_intf.stop();
 }
 
-void compute_buffer() {
-  //Set up initial cells in matrix
- for (uint16_t col = 0; col < 8; col++) {
-    for (uint16_t row = 0; row < 128; row++) {
+void computeMatrix() {
+ for (uint8_t col = 0; col < 8; col++) {
+    for (uint8_t row = 0; row < 128; row++) {
       Matrix[row].b[col] = gen_mb_byte(row, col);
     }
   }
 }
 
-byte gen_mb_byte(uint16_t x, uint16_t y){
+byte gen_mb_byte(uint8_t x, uint8_t y){
   byte out = B00000000;
   float a,b,ca,cb,aa,bb, brightness;
   byte n;
 
-  for (uint16_t i = 0; i < 8; i++) {
+  for (uint8_t i = 0; i < 8; i++) {
     a = -2.5*(0.5 - float(x)/64)*t - 1.5; 
-    b = -2.5*(0.5 - float(y*8+i)/64)*t;
+    b = -2.5*(0.5 - float(((y<<3)+i))/64)*t;
     ca = a;
     cb = b;
     n = 0;
@@ -97,7 +96,6 @@ byte gen_mb_byte(uint16_t x, uint16_t y){
       n++;
     }
     
-    
     if (n == iter_max) {
       out = out | (1 << i);
       continue;
@@ -105,7 +103,7 @@ byte gen_mb_byte(uint16_t x, uint16_t y){
 
     brightness = easeOutCirc(float(n)/100) - 0.14;
 
-    if(brightness * bfactor * 4 < bayer8[(x%8)*8 +(y*8+i)%8]){
+    if(brightness * bfactor * 4 < bayer8[(x & B00000111)*8 + ((y*8+i) & B00000111)]){
       out = out | (1 << i);
     }
   }
@@ -115,5 +113,4 @@ byte gen_mb_byte(uint16_t x, uint16_t y){
 float easeOutCirc(float x) {
 	return sqrt(1 - (x-1)*(x-1));
 }
-
 
